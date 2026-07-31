@@ -72,6 +72,15 @@ class SipMessage:
                 return
         self.headers.append(SipHeader(name=name, value=value))
 
+    def content_type(self) -> str:
+        """The body's MIME type (e.g. ``application/sdp``), lower-cased and
+        stripped of parameters, or "" if absent. Falls back to the SIP
+        compact header form ``c`` when the long form isn't present."""
+        value = self.get("Content-Type") or self.get("c")
+        if not value:
+            return ""
+        return value.split(";", 1)[0].strip().lower()
+
     def serialize(self, fix_content_length: bool = True) -> bytes:
         if fix_content_length:
             self.set("Content-Length", str(len(self.body)))

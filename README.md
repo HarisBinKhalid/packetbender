@@ -9,9 +9,13 @@ Open a capture, click a packet, and edit it at whatever level makes sense:
 - **Every packet**: L2-L4 header fields (Ethernet MACs, IP addresses/TTL,
   UDP/TCP ports, flags, ...) in a generic field table.
 - **SIP packets**: headers (`From`, `To`, `Call-ID`, `Contact`, `Via`, ...)
-  and the message body as plain text.
+  and the message body as plain text — with a structured **SDP** or
+  **XML** editor automatically offered alongside when the body's
+  `Content-Type` calls for it.
 - **RTP packets**: fixed header fields (sequence number, timestamp, SSRC,
   payload type, marker bit).
+- **Standalone SDP or XML payloads**: the same structured editors, for
+  packets carrying them outside of a SIP body.
 - **Anything else**: the raw payload as text.
 
 Save a new PCAP and `Content-Length`, IP/UDP/TCP length fields, and
@@ -21,19 +25,27 @@ value.
 ## Features
 
 - Wireshark-like packet list (index, time, source, destination, protocol,
-  length, info); packets with a recognized SIP or RTP payload are
-  highlighted.
+  length, info); packets with a recognized payload (SIP, RTP, SDP, XML)
+  are highlighted.
 - **Layers tab** (every packet): edit any L2-L4 header field for Ethernet,
   IP/IPv6, UDP, and TCP. Length/checksum fields default to "Auto"
   (recalculated on save) but can be unchecked to pin an explicit value.
 - **SIP tab**: edit the start line, add/remove/edit any header (including
-  duplicates like multiple `Via` lines), and the message body.
+  duplicates like multiple `Via` lines), and the message body. The body
+  section gets an extra **SDP Fields** or **XML** sub-tab when
+  `Content-Type` is `application/sdp` or an XML type — editing there
+  regenerates the underlying body text (and `Content-Length`) on apply.
 - **RTP tab**: edit the fixed 12-byte RTP header (version, padding,
   extension, marker, payload type, sequence number, timestamp, SSRC).
   RTP has no fixed signature, so detection is a best-effort heuristic
   (version bits == 2); CSRC lists and header extensions are treated as
   opaque and passed through untouched.
-- **Raw payload tab**: for anything not recognized as SIP or RTP, edit the
+- **SDP tab** (standalone, non-SIP payload): every `type=value` line
+  (`v=`, `o=`, `c=`, `m=`, `a=`, ...) in an editable table, in order.
+- **XML tab** (standalone, non-SIP payload): edit as text, with a
+  "Validate / Pretty-print" button that reformats and reports parse
+  errors via `xml.dom.minidom`.
+- **Raw payload tab**: for anything not recognized above, edit the
   payload as Latin-1 text (a lossless byte <-> text mapping).
 - Save edits to a new PCAP file, leaving the original untouched.
 
@@ -72,8 +84,8 @@ packetbender
 1. **Open PCAP...** and select a capture file.
 2. Click a packet in the list.
 3. Use the **Layers** tab to edit L2-L4 header fields, and the **SIP**,
-   **RTP**, or **Raw Payload** tab (whichever applies) to edit the
-   payload.
+   **RTP**, **SDP**, **XML**, or **Raw Payload** tab (whichever applies)
+   to edit the payload.
 4. Click **Apply changes to packet** to write the edits back into the
    in-memory packet (lengths/checksums are recalculated at this point,
    unless pinned via the Layers tab's "Auto" checkbox).
@@ -86,8 +98,8 @@ pip install -r requirements.txt pytest
 pytest
 ```
 
-Core parsing/serialization (SIP, RTP, generic layer fields) and PCAP
-load/save logic are unit tested independently of the GUI (`tests/`).
+Core parsing/serialization (SIP, SDP, RTP, XML, generic layer fields) and
+PCAP load/save logic are unit tested independently of the GUI (`tests/`).
 
 ## Project layout
 
@@ -95,14 +107,16 @@ load/save logic are unit tested independently of the GUI (`tests/`).
 packetbender/
   core/
     sip_message.py    # SIP header/body parsing and serialization
-    rtp_message.py     # Minimal RTP fixed-header dissector + detection heuristic
-    layer_fields.py     # Generic L2-L4 field introspection/editing for any packet
-    pcap_model.py       # PCAP load/save + checksum/length recalculation via Scapy
+    sdp_message.py      # SDP session-description line parsing/serialization
+    rtp_message.py       # Minimal RTP fixed-header dissector + detection heuristic
+    xml_message.py        # XML detection, validation, and pretty-printing
+    layer_fields.py         # Generic L2-L4 field introspection/editing for any packet
+    pcap_model.py           # PCAP load/save + checksum/length recalculation via Scapy
   gui/
-    main_window.py      # PyQt6 main window: packet list + Layers/SIP/RTP/Raw tabs
-  app.py                # Application entry point
-tests/                  # Unit tests for the core (non-GUI) logic
-main.py                 # Convenience launcher (python main.py)
+    main_window.py          # PyQt6 main window: packet list + Layers/SIP/RTP/SDP/XML/Raw tabs
+  app.py                    # Application entry point
+tests/                      # Unit tests for the core (non-GUI) logic
+main.py                     # Convenience launcher (python main.py)
 ```
 
 ## License

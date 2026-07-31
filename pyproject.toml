@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "packetbender"
-version = "0.2.0"
-description = "A small GUI for viewing and editing packets (SIP, RTP, and generic L2-L4 fields) inside PCAP files"
+version = "0.3.0"
+description = "A small GUI for viewing and editing packets (SIP, SDP, RTP, XML, and generic L2-L4 fields) inside PCAP files"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

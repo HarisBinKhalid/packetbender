@@ -2,11 +2,14 @@
 
 Every packet gets a generic "Layers" tab for editing L2-L4 header fields
 (Ethernet/IP/UDP/TCP/...). Packets with a recognized application payload
-additionally get a protocol-specific tab (SIP or RTP today); anything
-else falls back to a raw-bytes text editor.
+additionally get a protocol-specific tab (SIP, RTP, SDP, or XML today);
+anything else falls back to a raw-bytes text editor. SDP/XML carried as a
+SIP body get the same structured editors nested inside the SIP tab.
 """
 
 from __future__ import annotations
+
+from xml.parsers.expat import ExpatError
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QKeySequence
@@ -33,16 +36,25 @@ from scapy.packet import Raw
 
 from packetbender.core.layer_fields import field_rows, parse_field_value
 from packetbender.core.pcap_model import PcapModel
+from packetbender.core.sdp_message import SdpLine, SdpMessage, looks_like_sdp
 from packetbender.core.sip_message import SipHeader, SipMessage
+from packetbender.core.xml_message import looks_like_xml, pretty_print
 
 PACKET_COLUMNS = ("#", "Time", "Source", "Destination", "Protocol", "Length", "Info")
 HEADER_COLUMNS = ("Header", "Value")
 LAYER_COLUMNS = ("Layer", "Field", "Value", "Auto")
+SDP_COLUMNS = ("Type", "Value")
 
 RTP_FIELDS = (
     "version", "padding", "extension", "csrc_count",
     "marker", "payload_type", "sequence", "timestamp", "ssrc",
 )
+
+SDP_CONTENT_TYPES = ("application/sdp",)
+
+
+def _is_xml_content_type(content_type: str) -> bool:
+    return content_type in ("application/xml", "text/xml") or content_type.endswith("+xml")
 
 
 class MainWindow(QMainWindow):
@@ -87,10 +99,12 @@ class MainWindow(QMainWindow):
         self.layers_tab = self._build_layers_tab()
         self.sip_tab = self._build_sip_tab()
         self.rtp_tab = self._build_rtp_tab()
+        self.sdp_tab, self.sdp_table = self._build_sdp_table_widget()
+        self.xml_tab, self.xml_edit = self._build_xml_editor_widget()
         self.raw_tab = self._build_raw_tab()
 
         self.tabs.addTab(self.layers_tab, "Layers")
-        # SIP/RTP/Raw tabs are added/removed dynamically per packet.
+        # SIP/RTP/SDP/XML/Raw tabs are added/removed dynamically per packet.
 
         apply_row = QHBoxLayout()
         self.apply_btn = QPushButton("Apply changes to packet")
@@ -151,11 +165,65 @@ class MainWindow(QMainWindow):
         layout.addLayout(header_btn_row)
 
         layout.addWidget(QLabel("Body (Content-Length is recalculated automatically):"))
+        self.sip_body_tabs = QTabWidget()
+
+        text_tab = QWidget()
+        text_layout = QVBoxLayout(text_tab)
         self.body_edit = QPlainTextEdit()
         self.body_edit.textChanged.connect(self._mark_dirty)
-        layout.addWidget(self.body_edit)
+        text_layout.addWidget(self.body_edit)
+        self.sip_body_tabs.addTab(text_tab, "Text")
+
+        self.sip_sdp_tab, self.sip_sdp_table = self._build_sdp_table_widget()
+        self.sip_xml_tab, self.sip_xml_edit = self._build_xml_editor_widget()
+        # SDP Fields / XML sub-tabs are added/removed dynamically based on
+        # the body's Content-Type; the Text tab above is always the
+        # canonical source applied back to the packet.
+
+        layout.addWidget(self.sip_body_tabs)
 
         return widget
+
+    def _build_sdp_table_widget(self) -> tuple[QWidget, QTableWidget]:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(QLabel("SDP session description lines (type=value), in order."))
+
+        table = QTableWidget(0, len(SDP_COLUMNS))
+        table.setHorizontalHeaderLabels(SDP_COLUMNS)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        table.itemChanged.connect(self._mark_dirty)
+        layout.addWidget(table)
+
+        btn_row = QHBoxLayout()
+        add_btn = QPushButton("Add line")
+        add_btn.clicked.connect(lambda: self._add_table_row(table))
+        remove_btn = QPushButton("Remove selected")
+        remove_btn.clicked.connect(lambda: self._remove_table_rows(table))
+        btn_row.addWidget(add_btn)
+        btn_row.addWidget(remove_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        return widget, table
+
+    def _build_xml_editor_widget(self) -> tuple[QWidget, QPlainTextEdit]:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(QLabel("XML payload."))
+
+        edit = QPlainTextEdit()
+        edit.textChanged.connect(self._mark_dirty)
+        layout.addWidget(edit)
+
+        btn_row = QHBoxLayout()
+        pretty_btn = QPushButton("Validate / Pretty-print")
+        pretty_btn.clicked.connect(lambda: self._pretty_print_xml(edit))
+        btn_row.addStretch()
+        btn_row.addWidget(pretty_btn)
+        layout.addLayout(btn_row)
+
+        return widget, edit
 
     def _build_rtp_tab(self) -> QWidget:
         widget = QWidget()
@@ -276,7 +344,7 @@ class MainWindow(QMainWindow):
             )
             for col, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
-                if record.has_sip or record.has_rtp:
+                if record.has_sip or record.has_rtp or record.has_sdp or record.has_xml:
                     item.setForeground(Qt.GlobalColor.darkGreen)
                 self.packet_table.setItem(row, col, item)
 
@@ -347,7 +415,7 @@ class MainWindow(QMainWindow):
     # Protocol-specific tabs
     # ------------------------------------------------------------------
     def _configure_payload_tabs(self, record) -> None:
-        for tab in (self.sip_tab, self.rtp_tab, self.raw_tab):
+        for tab in (self.sip_tab, self.rtp_tab, self.sdp_tab, self.xml_tab, self.raw_tab):
             idx = self.tabs.indexOf(tab)
             if idx != -1:
                 self.tabs.removeTab(idx)
@@ -358,6 +426,14 @@ class MainWindow(QMainWindow):
         elif record.has_rtp:
             self.tabs.addTab(self.rtp_tab, "RTP")
             self._load_rtp_tab(record)
+        elif record.has_sdp:
+            self.tabs.addTab(self.sdp_tab, "SDP")
+            self._load_sdp_table(self.sdp_table, record.sdp)
+        elif record.has_xml:
+            self.tabs.addTab(self.xml_tab, "XML")
+            self.xml_edit.blockSignals(True)
+            self.xml_edit.setPlainText(record.xml)
+            self.xml_edit.blockSignals(False)
         elif record.packet.haslayer(Raw):
             self.tabs.addTab(self.raw_tab, "Raw Payload")
             self._load_raw_tab(record)
@@ -378,7 +454,40 @@ class MainWindow(QMainWindow):
         self.start_line_edit.blockSignals(False)
         self.body_edit.blockSignals(False)
 
+        for tab in (self.sip_sdp_tab, self.sip_xml_tab):
+            idx = self.sip_body_tabs.indexOf(tab)
+            if idx != -1:
+                self.sip_body_tabs.removeTab(idx)
+
+        content_type = sip.content_type()
+        if content_type in SDP_CONTENT_TYPES or (not content_type and looks_like_sdp(sip.body)):
+            sdp = SdpMessage.parse(sip.body) or SdpMessage(lines=[])
+            self._load_sdp_table(self.sip_sdp_table, sdp)
+            self.sip_body_tabs.addTab(self.sip_sdp_tab, "SDP Fields")
+        elif _is_xml_content_type(content_type) or (not content_type and looks_like_xml(sip.body)):
+            self.sip_xml_edit.blockSignals(True)
+            self.sip_xml_edit.setPlainText(sip.body.decode("utf-8", errors="replace"))
+            self.sip_xml_edit.blockSignals(False)
+            self.sip_body_tabs.addTab(self.sip_xml_tab, "XML")
+
+        self.sip_body_tabs.setCurrentIndex(0)
+
     def _apply_sip_tab(self, record) -> None:
+        # The Text tab is the canonical body source; if the user was
+        # editing the structured SDP/XML view instead, sync it back to
+        # Text first so headers like Content-Length are computed from
+        # what they actually see there.
+        current_sub_tab = self.sip_body_tabs.currentWidget()
+        if current_sub_tab is self.sip_sdp_tab:
+            sdp = self._apply_sdp_table(self.sip_sdp_table)
+            self.body_edit.blockSignals(True)
+            self.body_edit.setPlainText(sdp.serialize().decode("utf-8", errors="replace"))
+            self.body_edit.blockSignals(False)
+        elif current_sub_tab is self.sip_xml_tab:
+            self.body_edit.blockSignals(True)
+            self.body_edit.setPlainText(self.sip_xml_edit.toPlainText())
+            self.body_edit.blockSignals(False)
+
         headers = []
         for row in range(self.header_table.rowCount()):
             name_item = self.header_table.item(row, 0)
@@ -393,6 +502,36 @@ class MainWindow(QMainWindow):
         record.sip.start_line = self.start_line_edit.text()
         record.sip.headers = headers
         record.sip.body = self.body_edit.toPlainText().encode("utf-8")
+
+    def _load_sdp_table(self, table: QTableWidget, sdp: SdpMessage) -> None:
+        table.blockSignals(True)
+        table.setRowCount(len(sdp.lines))
+        for row, line in enumerate(sdp.lines):
+            table.setItem(row, 0, QTableWidgetItem(line.type))
+            table.setItem(row, 1, QTableWidgetItem(line.value))
+        table.blockSignals(False)
+
+    def _apply_sdp_table(self, table: QTableWidget) -> SdpMessage:
+        lines = []
+        for row in range(table.rowCount()):
+            type_item = table.item(row, 0)
+            value_item = table.item(row, 1)
+            if type_item is None or not type_item.text().strip():
+                continue
+            lines.append(SdpLine(
+                type=type_item.text().strip(),
+                value=value_item.text().strip() if value_item else "",
+            ))
+        return SdpMessage(lines=lines)
+
+    def _pretty_print_xml(self, edit: QPlainTextEdit) -> None:
+        try:
+            formatted = pretty_print(edit.toPlainText())
+        except ExpatError as exc:
+            QMessageBox.warning(self, "Invalid XML", f"Could not parse XML: {exc}")
+            return
+        edit.setPlainText(formatted)
+        self._mark_dirty()
 
     def _load_rtp_tab(self, record) -> None:
         for name in RTP_FIELDS:
@@ -435,6 +574,10 @@ class MainWindow(QMainWindow):
             self._apply_sip_tab(record)
         elif record.has_rtp:
             self._apply_rtp_tab(record)
+        elif record.has_sdp:
+            record.sdp = self._apply_sdp_table(self.sdp_table)
+        elif record.has_xml:
+            record.xml = self.xml_edit.toPlainText()
         elif record.packet.haslayer(Raw):
             self._apply_raw_tab(record)
 
@@ -459,6 +602,20 @@ class MainWindow(QMainWindow):
         if rows:
             self._mark_dirty()
 
+    def _add_table_row(self, table: QTableWidget) -> None:
+        row = table.rowCount()
+        table.insertRow(row)
+        table.setItem(row, 0, QTableWidgetItem(""))
+        table.setItem(row, 1, QTableWidgetItem(""))
+        self._mark_dirty()
+
+    def _remove_table_rows(self, table: QTableWidget) -> None:
+        rows = sorted({idx.row() for idx in table.selectedIndexes()}, reverse=True)
+        for row in rows:
+            table.removeRow(row)
+        if rows:
+            self._mark_dirty()
+
     def _mark_dirty(self, *_args) -> None:
         self.dirty = True
 
@@ -468,7 +625,7 @@ class MainWindow(QMainWindow):
         if not enabled:
             self.layer_table.setRowCount(0)
             self.layer_rows = []
-            for tab in (self.sip_tab, self.rtp_tab, self.raw_tab):
+            for tab in (self.sip_tab, self.rtp_tab, self.sdp_tab, self.xml_tab, self.raw_tab):
                 idx = self.tabs.indexOf(tab)
                 if idx != -1:
                     self.tabs.removeTab(idx)

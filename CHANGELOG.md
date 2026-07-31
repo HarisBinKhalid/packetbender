@@ -7,15 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- Packets whose capture link-layer type Scapy couldn't dissect (or that crashed mid-dissection) were silently shown as opaque `Raw` bytes with no Ethernet/IP/UDP/TCP fields — the Layers tab was empty and Source/Destination were blank for every packet. Loading now retries such packets as Ethernet, then as bare IP, before giving up, and surfaces a warning dialog naming the offending link-layer type when packets remain undissectable instead of failing silently.
-- Opening a **pcapng** file (as opposed to classic pcap) crashed with `'PcapNgReader' object has no attribute 'linktype'` before a single packet was read — pcapng stores link-layer type per-interface rather than as one top-level value, which the loader wasn't accounting for.
-
 ### Planned
 - Windows packaging (PyInstaller build) and CI build matrix.
 - Filter/search bar for the packet list.
 - Syntax highlighting for the raw SIP body/header editor.
 - Dissection of RTP CSRC lists and header extensions (currently passed through as opaque payload).
+
+## [0.3.0] - 2026-07-31
+
+### Added
+- **SDP editing**: a structured table of `type=value` lines (`v=`, `o=`, `c=`, `m=`, `a=`, ...), preserving line order (`packetbender.core.sdp_message`). Offered as an "SDP Fields" sub-tab nested in the SIP tab whenever the body's `Content-Type` is `application/sdp` (or the body looks like SDP with no Content-Type present), and as a standalone top-level "SDP" tab for packets carrying SDP outside of SIP.
+- **XML editing**: a text editor with a "Validate / Pretty-print" button that reformats via `xml.dom.minidom` and reports parse errors instead of silently mangling malformed input (`packetbender.core.xml_message`). Offered as an "XML" sub-tab nested in the SIP tab for XML-typed bodies (PIDF presence documents, MESSAGE/REFER bodies, etc.), and as a standalone top-level "XML" tab for other packets.
+- `SipMessage.content_type()` helper reading (and normalizing) the `Content-Type` header, with a fallback to the SIP compact form `c`.
+- Packet list protocol column now shows `SDP` / `XML` for standalone payloads of those types, matching the existing `SIP`/`RTP` labels.
+
+### Fixed
+- Packets whose capture link-layer type Scapy couldn't dissect (or that crashed mid-dissection) were silently shown as opaque `Raw` bytes with no Ethernet/IP/UDP/TCP fields — the Layers tab was empty and Source/Destination were blank for every packet. Loading now retries such packets as Ethernet, then as bare IP, before giving up, and surfaces a warning dialog naming the offending link-layer type when packets remain undissectable instead of failing silently.
+- Opening a **pcapng** file (as opposed to classic pcap) crashed with `'PcapNgReader' object has no attribute 'linktype'` before a single packet was read — pcapng stores link-layer type per-interface rather than as one top-level value, which the loader wasn't accounting for.
 
 ## [0.2.0] - 2026-07-31
 

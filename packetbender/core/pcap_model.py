@@ -2,9 +2,9 @@
 
 Every packet exposes its L2-L4 headers for generic editing (see
 ``layer_fields``), plus a protocol-specific view of its payload when one
-is recognized (SIP or RTP today). Length and checksum fields are
-recomputed automatically on save unless the user explicitly pinned a
-value via the generic field editor.
+is recognized (SIP, RTP, standalone SDP, or standalone XML today). Length
+and checksum fields are recomputed automatically on save unless the user
+explicitly pinned a value via the generic field editor.
 """
 
 from __future__ import annotations
@@ -19,7 +19,9 @@ from scapy.utils import PcapReader, wrpcap
 
 from .layer_fields import COMPUTED_FIELDS, finalize_packet
 from .rtp_message import RtpHeader, looks_like_rtp, parse_rtp, serialize_rtp
+from .sdp_message import SdpMessage, looks_like_sdp
 from .sip_message import SipMessage, looks_like_sip
+from .xml_message import looks_like_xml
 
 
 @dataclass
@@ -29,6 +31,11 @@ class PacketRecord:
     sip: SipMessage | None = None
     rtp: RtpHeader | None = None
     rtp_media: bytes = b""
+    # Standalone SDP/XML payloads (not carried inside a SIP body - that
+    # case is handled by the GUI parsing/serializing `sip.body` on the
+    # fly, since SDP/XML-in-SIP doesn't change how the packet is loaded).
+    sdp: SdpMessage | None = None
+    xml: str | None = None
     # (layer_class_name, field_name) pairs the user explicitly pinned via
     # the generic field editor - these are left alone on save instead of
     # being recomputed.
@@ -41,6 +48,14 @@ class PacketRecord:
     @property
     def has_rtp(self) -> bool:
         return self.rtp is not None
+
+    @property
+    def has_sdp(self) -> bool:
+        return self.sdp is not None
+
+    @property
+    def has_xml(self) -> bool:
+        return self.xml is not None
 
     def summary(self) -> dict:
         pkt = self.packet
@@ -59,6 +74,10 @@ class PacketRecord:
             proto = "SIP/UDP" if pkt.haslayer("UDP") else "SIP/TCP"
         elif self.has_rtp:
             proto = "RTP"
+        elif self.has_sdp:
+            proto = "SDP"
+        elif self.has_xml:
+            proto = "XML"
         elif pkt.haslayer("UDP"):
             proto = "UDP"
         elif pkt.haslayer("TCP"):
@@ -73,6 +92,12 @@ class PacketRecord:
                 f"PT={self.rtp.payload_type} Seq={self.rtp.sequence} "
                 f"TS={self.rtp.timestamp} SSRC=0x{self.rtp.ssrc:08x}"
             )
+        elif self.sdp is not None:
+            session_name = next((l.value for l in self.sdp.lines if l.type == "s"), "")
+            info = f"SDP {session_name}".strip()
+        elif self.xml is not None:
+            stripped = self.xml.lstrip()
+            info = stripped[:80].split("\n", 1)[0]
 
         return {
             "index": self.index,
@@ -95,6 +120,10 @@ class PacketRecord:
         elif self.rtp is not None:
             new_payload = serialize_rtp(self.rtp, self.rtp_media)
             self._set_raw_payload(new_payload)
+        elif self.sdp is not None:
+            self._set_raw_payload(self.sdp.serialize())
+        elif self.xml is not None:
+            self._set_raw_payload(self.xml.encode("utf-8"))
 
         pkt = self.packet
         for layer_name, fields in COMPUTED_FIELDS.items():
@@ -166,6 +195,8 @@ class PcapModel:
                 sip = None
                 rtp = None
                 rtp_media = b""
+                sdp = None
+                xml = None
 
                 if pkt.haslayer(Raw):
                     payload = bytes(pkt[Raw].load)
@@ -175,9 +206,14 @@ class PcapModel:
                         parsed = parse_rtp(payload)
                         if parsed is not None:
                             rtp, rtp_media = parsed
+                    elif looks_like_sdp(payload):
+                        sdp = SdpMessage.parse(payload)
+                    elif looks_like_xml(payload):
+                        xml = payload.decode("utf-8", errors="replace")
 
                 records.append(PacketRecord(
                     index=i, packet=pkt, sip=sip, rtp=rtp, rtp_media=rtp_media,
+                    sdp=sdp, xml=xml,
                 ))
 
         self.records = records
