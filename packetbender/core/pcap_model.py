@@ -11,6 +11,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from scapy.config import conf
+from scapy.layers.inet import IP
+from scapy.layers.l2 import Ether
 from scapy.packet import Raw
 from scapy.utils import PcapReader, wrpcap
 
@@ -114,15 +117,47 @@ class PacketRecord:
             self.packet = pkt / Raw(load=payload)
 
 
+def _try_redissect(raw_bytes: bytes):
+    """A packet that dissected as bare Raw means Scapy either didn't
+    recognize the capture's link-layer type or crashed while dissecting
+    it. Most real-world captures are Ethernet even when metadata says
+    otherwise (e.g. tools that mislabel the linktype), so retry as
+    Ethernet, then as a bare IP packet, before giving up."""
+    for cls in (Ether, IP):
+        try:
+            candidate = cls(raw_bytes)
+        except Exception:
+            continue
+        if candidate.haslayer("IP") or candidate.haslayer("IPv6") or candidate.haslayer("ARP"):
+            return candidate
+    return None
+
+
 class PcapModel:
     def __init__(self) -> None:
         self.records: list[PacketRecord] = []
         self.path: str | None = None
+        self.linktype: int | None = None
+        # Set when the capture's link-layer type isn't one Scapy has a
+        # dissector for, so every packet loaded as opaque bytes instead of
+        # being parsed into Ethernet/IP/etc. Surfaced by the GUI so this
+        # isn't a silent failure.
+        self.unrecognized_linktype_warning: str | None = None
 
     def load(self, path: str) -> None:
         records: list[PacketRecord] = []
+        unrecognized_count = 0
+
         with PcapReader(path) as reader:
+            self.linktype = reader.linktype
             for i, pkt in enumerate(reader):
+                if type(pkt) is Raw:
+                    resolved = _try_redissect(bytes(pkt))
+                    if resolved is not None:
+                        pkt = resolved
+                    else:
+                        unrecognized_count += 1
+
                 sip = None
                 rtp = None
                 rtp_media = b""
@@ -142,6 +177,17 @@ class PcapModel:
 
         self.records = records
         self.path = path
+
+        if unrecognized_count:
+            known_cls = conf.l2types.num2layer.get(self.linktype)
+            self.unrecognized_linktype_warning = (
+                f"Link-layer type {self.linktype}"
+                f"{'' if known_cls is None else f' ({known_cls.__name__})'} "
+                f"could not be dissected for {unrecognized_count} of "
+                f"{len(records)} packets; they are shown as raw bytes."
+            )
+        else:
+            self.unrecognized_linktype_warning = None
 
     def save(self, path: str) -> None:
         for record in self.records:

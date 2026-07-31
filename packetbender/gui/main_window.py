@@ -226,7 +226,15 @@ class MainWindow(QMainWindow):
         self.current_index = None
         self._populate_packet_table()
         self._set_editor_enabled(False)
-        self.status.showMessage(f"Loaded {len(self.model.records)} packets from {path}")
+
+        if self.model.unrecognized_linktype_warning:
+            QMessageBox.warning(
+                self, "Some packets could not be parsed",
+                self.model.unrecognized_linktype_warning,
+            )
+            self.status.showMessage(self.model.unrecognized_linktype_warning)
+        else:
+            self.status.showMessage(f"Loaded {len(self.model.records)} packets from {path}")
 
     def _save_pcap_as(self) -> None:
         if not self.model.records:
