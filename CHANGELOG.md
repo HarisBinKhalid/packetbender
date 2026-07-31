@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Packets whose capture link-layer type Scapy couldn't dissect (or that crashed mid-dissection) were silently shown as opaque `Raw` bytes with no Ethernet/IP/UDP/TCP fields — the Layers tab was empty and Source/Destination were blank for every packet. Loading now retries such packets as Ethernet, then as bare IP, before giving up, and surfaces a warning dialog naming the offending link-layer type when packets remain undissectable instead of failing silently.
+- Opening a **pcapng** file (as opposed to classic pcap) crashed with `'PcapNgReader' object has no attribute 'linktype'` before a single packet was read — pcapng stores link-layer type per-interface rather than as one top-level value, which the loader wasn't accounting for.
 
 ### Planned
 - Windows packaging (PyInstaller build) and CI build matrix.

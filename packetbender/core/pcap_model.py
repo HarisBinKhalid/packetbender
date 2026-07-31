@@ -149,7 +149,12 @@ class PcapModel:
         unrecognized_count = 0
 
         with PcapReader(path) as reader:
-            self.linktype = reader.linktype
+            # Classic pcap readers expose a single top-level `linktype`;
+            # pcapng readers store one per interface (and may not populate
+            # `interfaces` until the file is fully read), so there's no
+            # single reliable value to report there - `None` just means
+            # "not applicable" rather than a real failure.
+            self.linktype = getattr(reader, "linktype", None)
             for i, pkt in enumerate(reader):
                 if type(pkt) is Raw:
                     resolved = _try_redissect(bytes(pkt))
@@ -179,12 +184,16 @@ class PcapModel:
         self.path = path
 
         if unrecognized_count:
-            known_cls = conf.l2types.num2layer.get(self.linktype)
+            if self.linktype is None:
+                linktype_desc = "This capture's link-layer type"
+            else:
+                known_cls = conf.l2types.num2layer.get(self.linktype)
+                suffix = "" if known_cls is None else f" ({known_cls.__name__})"
+                linktype_desc = f"Link-layer type {self.linktype}{suffix}"
             self.unrecognized_linktype_warning = (
-                f"Link-layer type {self.linktype}"
-                f"{'' if known_cls is None else f' ({known_cls.__name__})'} "
-                f"could not be dissected for {unrecognized_count} of "
-                f"{len(records)} packets; they are shown as raw bytes."
+                f"{linktype_desc} could not be dissected for "
+                f"{unrecognized_count} of {len(records)} packets; "
+                f"they are shown as raw bytes."
             )
         else:
             self.unrecognized_linktype_warning = None
