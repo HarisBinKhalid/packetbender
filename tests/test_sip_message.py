@@ -1,4 +1,4 @@
-from sipedit.core.sip_message import SipMessage, looks_like_sip
+from packetbender.core.sip_message import SipMessage, looks_like_sip
 
 INVITE = (
     b"INVITE sip:bob@biloxi.example.com SIP/2.0\r\n"

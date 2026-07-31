@@ -2,7 +2,7 @@
 
 import sys
 
-from sipedit.app import main
+from packetbender.app import main
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows packaging (PyInstaller build) and CI build matrix.
 - Filter/search bar for the packet list.
 - Syntax highlighting for the raw SIP body/header editor.
+- Dissection of RTP CSRC lists and header extensions (currently passed through as opaque payload).
+
+## [0.2.0] - 2026-07-31
+
+### Changed
+- **Project renamed from SIPEdit to PacketBender**, reflecting scope beyond SIP: the tool now edits any packet's L2-L4 header fields, not just SIP payloads. Package import path changed from `sipedit` to `packetbender`; console script changed from `sipedit` to `packetbender`.
+
+### Added
+- **Layers tab**: generic L2-L4 header field editor available for every packet (Ethernet, IP/IPv6, UDP, TCP), not just ones with a recognized application payload. Length/checksum fields default to automatic recalculation on save, with a per-field "Auto" checkbox to pin an explicit value instead (`packetbender.core.layer_fields`).
+- **RTP tab**: minimal RTP (RFC 3550) fixed-header dissector and editor covering version, padding, extension, marker, payload type, sequence number, timestamp, and SSRC (`packetbender.core.rtp_message`). Detection is heuristic (RTP has no fixed signature); CSRC list and header extensions are preserved untouched as part of the media payload.
+- **Raw Payload tab**: fallback editor for any packet payload not recognized as SIP or RTP, shown as Latin-1 text for lossless byte-level editing.
+- Manual field pinning: edits to computed length/checksum fields made via the Layers tab persist through save instead of being silently overwritten.
 
 ## [0.1.0] - 2026-07-31
 

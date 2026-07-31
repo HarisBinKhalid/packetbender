@@ -6,12 +6,12 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
-from sipedit.gui.main_window import MainWindow
+from packetbender.gui.main_window import MainWindow
 
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("SIPEdit")
+    app.setApplicationName("PacketBender")
     window = MainWindow()
     window.show()
     return app.exec()
