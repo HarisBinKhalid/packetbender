@@ -71,7 +71,7 @@ class PacketRecord:
             src, dst = ip6.src, ip6.dst
 
         if self.has_sip:
-            proto = "SIP/UDP" if pkt.haslayer("UDP") else "SIP/TCP"
+            proto = "SIP/SDP" if self.sip.content_type() == "application/sdp" else "SIP"
         elif self.has_rtp:
             proto = "RTP"
         elif self.has_sdp:

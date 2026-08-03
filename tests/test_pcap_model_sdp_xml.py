@@ -52,6 +52,29 @@ def test_sip_body_with_sdp_content_type(tmp_path):
     assert record.has_sip
     assert record.sip.content_type() == "application/sdp"
     assert not record.has_sdp  # SDP-in-SIP is a GUI-level concern, not a separate record kind
+    assert record.summary()["proto"] == "SIP/SDP"
+
+
+def test_plain_sip_packet_shows_bare_sip_protocol_label(tmp_path):
+    plain_invite = (
+        b"INVITE sip:bob@biloxi.example.com SIP/2.0\r\n"
+        b"Via: SIP/2.0/UDP client.atlanta.example.com:5060\r\n"
+        b"From: Alice <sip:alice@atlanta.example.com>;tag=1\r\n"
+        b"To: Bob <sip:bob@biloxi.example.com>\r\n"
+        b"Call-ID: abc@atlanta.example.com\r\n"
+        b"CSeq: 1 INVITE\r\n"
+        b"Content-Length: 0\r\n"
+        b"\r\n"
+    )
+    path = str(tmp_path / "plain.pcap")
+    wrpcap(path, [_pkt("10.0.0.1", "10.0.0.2", 5060, 5060, plain_invite)])
+
+    model = PcapModel()
+    model.load(path)
+
+    record = model.records[0]
+    assert record.has_sip
+    assert record.summary()["proto"] == "SIP"
 
 
 def test_standalone_sdp_packet_detected(tmp_path):

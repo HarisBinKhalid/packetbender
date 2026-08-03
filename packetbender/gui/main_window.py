@@ -76,8 +76,8 @@ class MainWindow(QMainWindow):
     # UI construction
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.setCentralWidget(splitter)
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.setCentralWidget(self.splitter)
 
         self.packet_table = QTableWidget(0, len(PACKET_COLUMNS))
         self.packet_table.setHorizontalHeaderLabels(PACKET_COLUMNS)
@@ -88,7 +88,8 @@ class MainWindow(QMainWindow):
             len(PACKET_COLUMNS) - 1, QHeaderView.ResizeMode.Stretch
         )
         self.packet_table.itemSelectionChanged.connect(self._on_row_selected)
-        splitter.addWidget(self.packet_table)
+        self.packet_table.cellDoubleClicked.connect(self._on_row_double_clicked)
+        self.splitter.addWidget(self.packet_table)
 
         editor = QWidget()
         editor_layout = QVBoxLayout(editor)
@@ -113,9 +114,11 @@ class MainWindow(QMainWindow):
         apply_row.addWidget(self.apply_btn)
         editor_layout.addLayout(apply_row)
 
-        splitter.addWidget(editor)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
+        self.editor_panel = editor
+        self.splitter.addWidget(editor)
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 2)
+        self.splitter.setCollapsible(1, False)
 
         self.status = self.statusBar()
 
@@ -365,6 +368,16 @@ class MainWindow(QMainWindow):
         self._set_editor_enabled(True)
         self.status.showMessage(f"Editing packet {row}")
         self.dirty = False
+
+    def _on_row_double_clicked(self, row: int, _column: int) -> None:
+        """Guarantee the editor panel is visible and showing this packet,
+        even if the splitter was previously dragged down to a sliver -
+        double-clicking a row is the escape hatch to get it back."""
+        self.packet_table.selectRow(row)
+        sizes = self.splitter.sizes()
+        if len(sizes) == 2 and sizes[1] < 100:
+            total = sum(sizes) or self.splitter.width() or 1300
+            self.splitter.setSizes([int(total * 3 / 5), int(total * 2 / 5)])
 
     # ------------------------------------------------------------------
     # Layers tab (generic L2-L4 fields, always available)

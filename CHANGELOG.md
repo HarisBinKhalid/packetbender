@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Packet list protocol column now shows plain `SIP` (matching Wireshark) instead of `SIP/UDP`/`SIP/TCP`, and `SIP/SDP` specifically when the body's `Content-Type` is `application/sdp`.
+
+### Fixed
+- The editor panel could be dragged fully closed via the splitter with no way to reopen it. The splitter no longer allows collapsing it to zero, and double-clicking any packet row now also snaps the panel back to a usable size as a fallback.
+
 ### Planned
 - Windows packaging (PyInstaller build) and CI build matrix.
 - Filter/search bar for the packet list.
