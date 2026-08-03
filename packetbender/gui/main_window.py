@@ -556,6 +556,18 @@ class MainWindow(QMainWindow):
                     record.manual_fields.discard(key)
                     continue
                 record.manual_fields.add(key)
+            elif value_item.text() == frow.value:
+                # Unedited - leave it alone. Re-applying every displayed
+                # field on every Apply (not just the one actually changed)
+                # corrupts fields that don't round-trip through
+                # str()/parse_field_value() unchanged - e.g. IP.options is
+                # a list, displayed as "[]", but reapplying would set it
+                # to the literal 2-character string "[]", which gets
+                # encoded as extra header bytes. That desyncs the packet's
+                # real length from its length/IHL fields and shifts every
+                # field after it - the last edit reported this as a
+                # "length error" after just changing an IP address.
+                continue
 
             parsed = parse_field_value(value_item.text())
             setattr(frow.layer, frow.field_name, parsed)

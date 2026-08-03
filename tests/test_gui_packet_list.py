@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import QApplication
 from scapy.layers.inet import IP, UDP
 from scapy.layers.l2 import Ether
 from scapy.packet import Raw
-from scapy.utils import wrpcap
+from scapy.utils import rdpcap, wrpcap
 
 from packetbender.gui.main_window import COLUMN_DEFS, MainWindow
 
@@ -144,3 +144,32 @@ def test_editor_panel_can_be_closed_and_reopened_via_double_click(window, app):
     window._on_row_double_clicked(1, 0)
     assert window.editor_panel.isVisible()
     assert window.current_index == window._record_index_at_row(1)
+
+
+def test_editing_one_layer_field_does_not_corrupt_untouched_fields(window, tmp_path):
+    # Regression test: editing only IP.dst via the Layers tab used to
+    # also reapply every OTHER displayed field's text, including
+    # IP.options (a list, displayed as "[]"). Reapplying that as the
+    # literal string "[]" encoded garbage bytes into the IP header,
+    # desyncing it from the IHL/length fields and shifting the UDP header
+    # that followed - Wireshark reported this as a length error.
+    window.packet_table.selectRow(0)
+    record = window.model.records[window.current_index]
+    assert record.packet["IP"].options == []  # sanity: this is what dissection sets
+
+    dst_row = next(
+        row for row, frow in enumerate(window.layer_rows)
+        if frow.layer_name == "IP" and frow.field_name == "dst"
+    )
+    window.layer_table.item(dst_row, 2).setText("10.0.0.99")
+
+    window._apply_editor_to_record()
+
+    out_path = str(tmp_path / "out.pcap")
+    window.model.save(out_path)
+    reloaded = rdpcap(out_path)[0]
+
+    assert reloaded["IP"].dst == "10.0.0.99"
+    assert reloaded["IP"].options == []
+    assert reloaded["IP"].len == len(bytes(reloaded["IP"]))
+    assert reloaded["UDP"].len == len(bytes(reloaded["UDP"]))
