@@ -104,6 +104,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_toolbar()
         self._set_editor_enabled(False)
+        self.editor_panel.setVisible(False)
 
     # ------------------------------------------------------------------
     # UI construction
