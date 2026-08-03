@@ -128,3 +128,19 @@ def test_default_sort_is_ascending_by_packet_number(window):
     numbers = [int(window.packet_table.item(r, 0).text())
                for r in range(window.packet_table.rowCount())]
     assert numbers == sorted(numbers)
+
+
+def test_editor_panel_can_be_closed_and_reopened_via_double_click(window, app):
+    # isVisible() reflects actual on-screen state, which requires the
+    # window to actually be shown - not just constructed.
+    window.show()
+    app.processEvents()
+
+    assert window.editor_panel.isVisible()
+
+    window._close_editor_panel()
+    assert not window.editor_panel.isVisible()
+
+    window._on_row_double_clicked(1, 0)
+    assert window.editor_panel.isVisible()
+    assert window.current_index == window._record_index_at_row(1)

@@ -158,6 +158,16 @@ class MainWindow(QMainWindow):
         editor = QWidget()
         editor_layout = QVBoxLayout(editor)
 
+        editor_header_row = QHBoxLayout()
+        editor_header_row.addWidget(QLabel("Packet Editor"))
+        editor_header_row.addStretch()
+        close_editor_btn = QPushButton("✕")
+        close_editor_btn.setFixedWidth(28)
+        close_editor_btn.setToolTip("Close panel (double-click any packet to reopen)")
+        close_editor_btn.clicked.connect(self._close_editor_panel)
+        editor_header_row.addWidget(close_editor_btn)
+        editor_layout.addLayout(editor_header_row)
+
         self.tabs = QTabWidget()
         editor_layout.addWidget(self.tabs)
 
@@ -491,13 +501,19 @@ class MainWindow(QMainWindow):
 
     def _on_row_double_clicked(self, row: int, _column: int) -> None:
         """Guarantee the editor panel is visible and showing this packet,
-        even if the splitter was previously dragged down to a sliver -
-        double-clicking a row is the escape hatch to get it back."""
+        even if it was explicitly closed or the splitter was dragged down
+        to a sliver - double-clicking a row is the escape hatch to get it
+        back either way."""
         self.packet_table.selectRow(row)
+        if not self.editor_panel.isVisible():
+            self.editor_panel.setVisible(True)
         sizes = self.splitter.sizes()
         if len(sizes) == 2 and sizes[1] < 100:
             total = sum(sizes) or self.splitter.width() or 1300
             self.splitter.setSizes([int(total * 3 / 5), int(total * 2 / 5)])
+
+    def _close_editor_panel(self) -> None:
+        self.editor_panel.setVisible(False)
 
     # ------------------------------------------------------------------
     # Layers tab (generic L2-L4 fields, always available)
