@@ -122,10 +122,10 @@ class MainWindow(QMainWindow):
         self.filter_edit.setPlaceholderText(
             "Search packets - IP, port, protocol, SIP/SDP/XML content, RTP fields..."
         )
-        self.filter_edit.textChanged.connect(self._apply_filter)
+        self.filter_edit.returnPressed.connect(self._apply_filter)
         filter_row.addWidget(self.filter_edit)
         clear_filter_btn = QPushButton("Clear")
-        clear_filter_btn.clicked.connect(self.filter_edit.clear)
+        clear_filter_btn.clicked.connect(self._clear_filter)
         filter_row.addWidget(clear_filter_btn)
         list_layout.addLayout(filter_row)
 
@@ -143,6 +143,11 @@ class MainWindow(QMainWindow):
 
         for col, (_key, _label, default_visible, _kind) in enumerate(COLUMN_DEFS):
             self.packet_table.setColumnHidden(col, not default_visible)
+
+        # Qt's header defaults to a Descending sort indicator on column 0
+        # before any column is clicked, which would show packets in
+        # reverse order by default - force ascending-by-# instead.
+        header.setSortIndicator(0, Qt.SortOrder.AscendingOrder)
 
         self.packet_table.itemSelectionChanged.connect(self._on_row_selected)
         self.packet_table.cellDoubleClicked.connect(self._on_row_double_clicked)
@@ -452,6 +457,10 @@ class MainWindow(QMainWindow):
             )
             matches = needle in column_text or needle in record.searchable_text()
             self.packet_table.setRowHidden(row, not matches)
+
+    def _clear_filter(self) -> None:
+        self.filter_edit.clear()
+        self._apply_filter()
 
     def _record_index_at_row(self, row: int) -> int:
         return self.packet_table.item(row, 0).data(Qt.ItemDataRole.UserRole)

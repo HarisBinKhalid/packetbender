@@ -88,8 +88,16 @@ def test_selection_tracks_correct_record_after_sorting(window):
     assert len(window.model.records[window.current_index].packet) == 2265
 
 
+def test_filter_does_not_apply_until_enter_is_pressed(window):
+    window.filter_edit.setText("2265")
+    visible = [r for r in range(window.packet_table.rowCount())
+               if not window.packet_table.isRowHidden(r)]
+    assert len(visible) == window.packet_table.rowCount()
+
+
 def test_filter_matches_visible_column_text(window):
     window.filter_edit.setText("2265")
+    window.filter_edit.returnPressed.emit()
     visible = [r for r in range(window.packet_table.rowCount())
                if not window.packet_table.isRowHidden(r)]
     assert len(visible) == 1
@@ -99,6 +107,7 @@ def test_filter_matches_deep_sip_content_not_shown_in_columns(window):
     # "sdp" via Content-Type isn't shown in any visible column directly,
     # but should still be found via searchable_text().
     window.filter_edit.setText("application/sdp")
+    window.filter_edit.returnPressed.emit()
     visible = [r for r in range(window.packet_table.rowCount())
                if not window.packet_table.isRowHidden(r)]
     assert len(visible) == 1
@@ -108,7 +117,14 @@ def test_filter_matches_deep_sip_content_not_shown_in_columns(window):
 
 def test_clearing_filter_shows_all_rows(window):
     window.filter_edit.setText("2265")
-    window.filter_edit.setText("")
+    window.filter_edit.returnPressed.emit()
+    window._clear_filter()
     visible = [r for r in range(window.packet_table.rowCount())
                if not window.packet_table.isRowHidden(r)]
     assert len(visible) == window.packet_table.rowCount()
+
+
+def test_default_sort_is_ascending_by_packet_number(window):
+    numbers = [int(window.packet_table.item(r, 0).text())
+               for r in range(window.packet_table.rowCount())]
+    assert numbers == sorted(numbers)
