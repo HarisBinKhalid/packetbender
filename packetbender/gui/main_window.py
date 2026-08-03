@@ -9,6 +9,7 @@ SIP body get the same structured editors nested inside the SIP tab.
 
 from __future__ import annotations
 
+import os
 from xml.parsers.expat import ExpatError
 
 from PyQt6.QtCore import Qt
@@ -73,6 +74,8 @@ RTP_FIELDS = (
 
 SDP_CONTENT_TYPES = ("application/sdp",)
 
+BASE_TITLE = "PacketBender — Packet Editor"
+
 
 def _is_xml_content_type(content_type: str) -> bool:
     return content_type in ("application/xml", "text/xml") or content_type.endswith("+xml")
@@ -96,7 +99,7 @@ class NumericTableWidgetItem(QTableWidgetItem):
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("PacketBender — Packet Editor")
+        self.setWindowTitle(BASE_TITLE)
         self.resize(1300, 760)
 
         self.model = PcapModel()
@@ -379,6 +382,7 @@ class MainWindow(QMainWindow):
         self.current_index = None
         self._populate_packet_table()
         self._set_editor_enabled(False)
+        self.setWindowTitle(f"{BASE_TITLE} — {os.path.basename(path)}")
 
         if self.model.unrecognized_linktype_warning:
             QMessageBox.warning(
@@ -420,7 +424,7 @@ class MainWindow(QMainWindow):
             self._apply_editor_to_record()
 
         filter_active = bool(self.filter_edit.text().strip())
-        dialog = BulkEditDialog(self, filter_active)
+        dialog = BulkEditDialog(self, filter_active, self._bulk_edit_target_records)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 

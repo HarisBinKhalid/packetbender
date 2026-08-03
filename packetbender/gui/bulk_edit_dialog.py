@@ -15,12 +15,21 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from packetbender.core.bulk_edit import SAFE_BULK_FIELDS
+from packetbender.core.bulk_edit import (
+    SAFE_BULK_FIELDS,
+    count_layer_field_matches,
+    count_sip_header_matches,
+)
 
 
 class BulkEditDialog(QDialog):
-    def __init__(self, parent, filter_active: bool) -> None:
+    def __init__(self, parent, filter_active: bool, records_provider) -> None:
+        """``records_provider(scope: str) -> list[PacketRecord]`` resolves
+        the current scope selection to the records it covers, letting the
+        dialog show a live "N packets match" count as the user edits
+        fields - not just after the fact."""
         super().__init__(parent)
+        self._records_provider = records_provider
         self.setWindowTitle("Bulk Edit")
         self.setMinimumWidth(440)
 
@@ -33,6 +42,7 @@ class BulkEditDialog(QDialog):
         self.scope_combo.addItem("Currently filtered packets only", "filtered")
         if not filter_active:
             self.scope_combo.model().item(1).setEnabled(False)
+        self.scope_combo.currentIndexChanged.connect(self._update_preview)
         form.addRow("Apply to:", self.scope_combo)
 
         self.target_combo = QComboBox()
@@ -42,6 +52,12 @@ class BulkEditDialog(QDialog):
         form.addRow("Change:", self.target_combo)
 
         layout.addLayout(form)
+
+        # Created before the pages below, since building the layer-field
+        # page triggers an initial _update_preview() call that needs it
+        # to already exist.
+        self.preview_label = QLabel()
+        self.preview_label.setStyleSheet("font-weight: bold;")
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self._build_sip_header_page())
@@ -55,6 +71,8 @@ class BulkEditDialog(QDialog):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
+        layout.addWidget(self.preview_label)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -62,13 +80,17 @@ class BulkEditDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+        self._update_preview()
+
     def _build_sip_header_page(self) -> QWidget:
         widget = QWidget()
         form = QFormLayout(widget)
         self.header_name_edit = QLineEdit()
         self.header_name_edit.setPlaceholderText("e.g. Call-ID")
+        self.header_name_edit.textChanged.connect(self._update_preview)
         self.header_old_value_edit = QLineEdit()
         self.header_old_value_edit.setPlaceholderText("optional")
+        self.header_old_value_edit.textChanged.connect(self._update_preview)
         self.header_new_value_edit = QLineEdit()
         form.addRow("Header name:", self.header_name_edit)
         form.addRow("Old value:", self.header_old_value_edit)
@@ -85,9 +107,11 @@ class BulkEditDialog(QDialog):
 
         self.field_combo = QComboBox()
         self._on_layer_changed(self.layer_combo.currentText())
+        self.field_combo.currentTextChanged.connect(self._update_preview)
 
         self.layer_old_value_edit = QLineEdit()
         self.layer_old_value_edit.setPlaceholderText("optional")
+        self.layer_old_value_edit.textChanged.connect(self._update_preview)
         self.layer_new_value_edit = QLineEdit()
 
         form.addRow("Layer:", self.layer_combo)
@@ -98,10 +122,27 @@ class BulkEditDialog(QDialog):
 
     def _on_target_changed(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
+        self._update_preview()
 
     def _on_layer_changed(self, layer_name: str) -> None:
+        self.field_combo.blockSignals(True)
         self.field_combo.clear()
         self.field_combo.addItems(SAFE_BULK_FIELDS.get(layer_name, ()))
+        self.field_combo.blockSignals(False)
+        self._update_preview()
+
+    def _update_preview(self) -> None:
+        records = self._records_provider(self.scope())
+
+        if self.target_type() == "sip_header":
+            header_name, old_value, _new_value = self.sip_header_params()
+            count = count_sip_header_matches(records, header_name, old_value) if header_name else 0
+        else:
+            layer_name, field_name, old_value, _new_value = self.layer_field_params()
+            count = count_layer_field_matches(records, layer_name, field_name, old_value)
+
+        noun = "packet" if count == 1 else "packets"
+        self.preview_label.setText(f"This will change {count} {noun}.")
 
     def scope(self) -> str:
         return self.scope_combo.currentData()

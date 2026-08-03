@@ -68,7 +68,7 @@ def test_bulk_edit_target_records_filtered_scope(window):
 def test_bulk_edit_dialog_sip_header_flow_end_to_end(window):
     records = window._bulk_edit_target_records("all")
 
-    dialog = BulkEditDialog(window, filter_active=False)
+    dialog = BulkEditDialog(window, filter_active=False, records_provider=window._bulk_edit_target_records)
     dialog.header_name_edit.setText("Call-ID")
     dialog.header_old_value_edit.setText("shared-call-id")
     dialog.header_new_value_edit.setText("renamed-call-id")
@@ -85,7 +85,7 @@ def test_bulk_edit_dialog_sip_header_flow_end_to_end(window):
 def test_bulk_edit_dialog_layer_field_flow_end_to_end(window):
     records = window._bulk_edit_target_records("all")
 
-    dialog = BulkEditDialog(window, filter_active=False)
+    dialog = BulkEditDialog(window, filter_active=False, records_provider=window._bulk_edit_target_records)
     dialog.target_combo.setCurrentIndex(1)
     dialog.layer_combo.setCurrentText("IP")
     dialog.field_combo.setCurrentText("src")
@@ -117,3 +117,30 @@ def test_bulk_edit_reselects_current_packet_after_edit(window):
 
     assert window.current_index == 0
     assert window.model.records[0].sip.get("Call-ID") == "post-edit-id"
+
+
+def test_bulk_edit_dialog_preview_updates_live(window):
+    dialog = BulkEditDialog(window, filter_active=True, records_provider=window._bulk_edit_target_records)
+
+    dialog.header_name_edit.setText("Call-ID")
+    assert dialog.preview_label.text() == "This will change 2 packets."
+
+    dialog.header_old_value_edit.setText("shared-call-id")
+    assert dialog.preview_label.text() == "This will change 2 packets."
+
+    dialog.header_old_value_edit.setText("no-such-value")
+    assert dialog.preview_label.text() == "This will change 0 packets."
+
+
+def test_bulk_edit_dialog_preview_respects_filtered_scope(window):
+    # sport=5061 is unique to the ACK packet - narrows the filter to just
+    # one of the two SIP packets that otherwise share the same Call-ID.
+    window.filter_edit.setText("5061")
+    window.filter_edit.returnPressed.emit()
+
+    dialog = BulkEditDialog(window, filter_active=True, records_provider=window._bulk_edit_target_records)
+    dialog.header_name_edit.setText("Call-ID")
+    assert dialog.preview_label.text() == "This will change 2 packets."  # still "all" by default
+
+    dialog.scope_combo.setCurrentIndex(1)  # "Currently filtered packets only"
+    assert dialog.preview_label.text() == "This will change 1 packet."

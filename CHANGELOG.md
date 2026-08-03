@@ -10,9 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - A close ("✕") button on the editor panel, so it can be explicitly dismissed instead of only being resizable. Double-clicking any packet row still reopens it (and reopens it if it was closed, not just resized down).
 - **Bulk Edit** (new toolbar action): apply one field change across every matching packet instead of editing packets one at a time - e.g. replace a `Call-ID` across every SIP message in a call, or set the source IP for every packet in a capture. Supports two targets (a SIP header, or a scalar L2-L4 field on Ethernet/IP/IPv6/UDP/TCP), an optional "old value" filter (blank matches every packet that has the field), and a scope of either all packets or only the currently filtered ones (`packetbender.core.bulk_edit`, `packetbender.gui.bulk_edit_dialog`).
+- **Bulk Edit live preview**: the dialog now shows "This will change N packet(s)" as you type, updated on every field/scope change, so a too-narrow "old value" filter is obvious before committing to the edit rather than only visible in the after-the-fact confirmation.
+- The window title now persistently shows the name of the currently open capture (e.g. `PacketBender — Packet Editor — capture.pcap`), instead of only a status-bar message that gets overwritten as soon as you select a packet.
 
 ### Changed
 - The editor panel now starts closed by default on launch, rather than open with nothing selected. Double-click any packet row to open it.
+
+### Fixed
+- Switching the Bulk Edit dialog's "Layer" dropdown while on the Generic Field page could abort the whole application (a native Qt crash, not a Python exception) - repopulating the "Field" dropdown fired its `currentTextChanged` signal mid-mutation, reentrantly triggering the live-preview update while the combo box was in a transient, half-populated state. Fixed by blocking signals during the repopulate and updating the preview once, explicitly, afterward.
 
 ### Fixed
 - The packet list defaulted to sorted by packet number *descending* instead of ascending - Qt's header defaults to a descending sort indicator on column 0 before any column has been clicked, which this now overrides explicitly on startup.
