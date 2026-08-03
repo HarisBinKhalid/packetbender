@@ -7,17 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+- Windows packaging (PyInstaller build) and CI build matrix.
+- Syntax highlighting for the raw SIP body/header editor.
+- Dissection of RTP CSRC lists and header extensions (currently passed through as opaque payload).
+
+## [0.4.0] - 2026-08-03
+
+### Added
+- **Sortable packet list columns**: click a header to sort ascending/descending; numeric columns (#, Time, Length, Src/Dst Port, TTL) sort by value rather than as text, so "2" sorts before "10".
+- **Show/hide columns**: right-click the packet list header for a checklist of available columns. Two new optional columns (Src Port, Dst Port, TTL) are added, hidden by default to match the previous look.
+- **Filter bar** above the packet list: searches both the visible column text and deeper packet content that isn't shown in any column (SIP headers/body, SDP lines, RTP fields, XML text) via `PacketRecord.searchable_text()`.
+
 ### Changed
 - Packet list protocol column now shows plain `SIP` (matching Wireshark) instead of `SIP/UDP`/`SIP/TCP`, and `SIP/SDP` specifically when the body's `Content-Type` is `application/sdp`.
 
 ### Fixed
 - The editor panel could be dragged fully closed via the splitter with no way to reopen it. The splitter no longer allows collapsing it to zero, and double-clicking any packet row now also snaps the panel back to a usable size as a fallback.
-
-### Planned
-- Windows packaging (PyInstaller build) and CI build matrix.
-- Filter/search bar for the packet list.
-- Syntax highlighting for the raw SIP body/header editor.
-- Dissection of RTP CSRC lists and header extensions (currently passed through as opaque payload).
+- Selecting a packet row after sorting or filtering the list previously assumed visual row position matched the packet's underlying record index - now broken by design once sorting/filtering exist. Row selection now resolves the actual record via a stable identity stored per row, independent of visual position.
 
 ## [0.3.0] - 2026-07-31
 

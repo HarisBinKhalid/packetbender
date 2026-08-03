@@ -25,8 +25,16 @@ value.
 ## Features
 
 - Wireshark-like packet list (index, time, source, destination, protocol,
-  length, info); packets with a recognized payload (SIP, RTP, SDP, XML)
-  are highlighted.
+  length, info, plus optional source/destination port and TTL columns);
+  packets with a recognized payload (SIP, RTP, SDP, XML) are highlighted.
+  - **Sortable columns**: click a header to sort ascending/descending
+    (numeric columns sort by value, not lexicographically).
+  - **Show/hide columns**: right-click any column header for a checklist
+    of available columns (Src Port, Dst Port, TTL are hidden by default).
+  - **Filter bar**: search across visible columns *and* deeper packet
+    content not shown in any column — SIP headers/body, SDP lines, RTP
+    fields, XML text — so e.g. searching an SDP attribute or a Call-ID
+    finds the packet even though that text isn't in the table.
 - **Layers tab** (every packet): edit any L2-L4 header field for Ethernet,
   IP/IPv6, UDP, and TCP. Length/checksum fields default to "Auto"
   (recalculated on save) but can be unchecked to pin an explicit value.

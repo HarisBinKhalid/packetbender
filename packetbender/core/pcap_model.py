@@ -60,15 +60,23 @@ class PacketRecord:
     def summary(self) -> dict:
         pkt = self.packet
         src = dst = proto = info = ""
+        src_port = dst_port = ttl = None
         length = len(pkt)
         timestamp = float(getattr(pkt, "time", 0.0))
 
         if pkt.haslayer("IP"):
             ip = pkt["IP"]
             src, dst = ip.src, ip.dst
+            ttl = ip.ttl
         elif pkt.haslayer("IPv6"):
             ip6 = pkt["IPv6"]
             src, dst = ip6.src, ip6.dst
+            ttl = ip6.hlim
+
+        if pkt.haslayer("UDP"):
+            src_port, dst_port = pkt["UDP"].sport, pkt["UDP"].dport
+        elif pkt.haslayer("TCP"):
+            src_port, dst_port = pkt["TCP"].sport, pkt["TCP"].dport
 
         if self.has_sip:
             proto = "SIP/SDP" if self.sip.content_type() == "application/sdp" else "SIP"
@@ -104,10 +112,36 @@ class PacketRecord:
             "time": timestamp,
             "src": src,
             "dst": dst,
+            "src_port": src_port,
+            "dst_port": dst_port,
+            "ttl": ttl,
             "proto": proto,
             "length": length,
             "info": info,
         }
+
+    def searchable_text(self) -> str:
+        """Every piece of text worth matching against a filter string,
+        beyond what's already shown in the packet list columns - SIP
+        headers/body, RTP fields, SDP lines, XML content."""
+        parts = [self.summary()["info"]]
+
+        if self.sip is not None:
+            parts.append(self.sip.start_line)
+            for header in self.sip.headers:
+                parts.append(header.name)
+                parts.append(header.value)
+            parts.append(self.sip.body.decode("utf-8", errors="replace"))
+        if self.rtp is not None:
+            parts.append(f"{self.rtp.payload_type} {self.rtp.sequence} "
+                          f"{self.rtp.timestamp} {self.rtp.ssrc:08x}")
+        if self.sdp is not None:
+            for line in self.sdp.lines:
+                parts.append(f"{line.type}={line.value}")
+        if self.xml is not None:
+            parts.append(self.xml)
+
+        return " ".join(parts).lower()
 
     def apply_edits(self) -> None:
         """Write payload-level edits (SIP/RTP) back into the packet, then

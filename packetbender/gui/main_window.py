@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -40,7 +41,24 @@ from packetbender.core.sdp_message import SdpLine, SdpMessage, looks_like_sdp
 from packetbender.core.sip_message import SipHeader, SipMessage
 from packetbender.core.xml_message import looks_like_xml, pretty_print
 
-PACKET_COLUMNS = ("#", "Time", "Source", "Destination", "Protocol", "Length", "Info")
+# (summary dict key, header label, visible by default, sort kind).
+# Column position here is fixed; visibility is toggled via the header's
+# right-click menu rather than by adding/removing actual columns, so a
+# hidden column's data still exists (for filtering/sorting) - it's just
+# not shown.
+COLUMN_DEFS = (
+    ("index", "#", True, "int"),
+    ("time", "Time", True, "float"),
+    ("src", "Source", True, "str"),
+    ("dst", "Destination", True, "str"),
+    ("src_port", "Src Port", False, "int"),
+    ("dst_port", "Dst Port", False, "int"),
+    ("ttl", "TTL", False, "int"),
+    ("proto", "Protocol", True, "str"),
+    ("length", "Length", True, "int"),
+    ("info", "Info", True, "str"),
+)
+
 HEADER_COLUMNS = ("Header", "Value")
 LAYER_COLUMNS = ("Layer", "Field", "Value", "Auto")
 SDP_COLUMNS = ("Type", "Value")
@@ -55,6 +73,21 @@ SDP_CONTENT_TYPES = ("application/sdp",)
 
 def _is_xml_content_type(content_type: str) -> bool:
     return content_type in ("application/xml", "text/xml") or content_type.endswith("+xml")
+
+
+class NumericTableWidgetItem(QTableWidgetItem):
+    """QTableWidgetItem sorts by comparing display text by default, which
+    orders "115" before "86" lexicographically. This compares the actual
+    numeric value instead, while keeping whatever text is shown."""
+
+    def __init__(self, text: str, sort_value: float) -> None:
+        super().__init__(text)
+        self.sort_value = sort_value
+
+    def __lt__(self, other: object) -> bool:
+        if isinstance(other, NumericTableWidgetItem):
+            return self.sort_value < other.sort_value
+        return super().__lt__(other)
 
 
 class MainWindow(QMainWindow):
@@ -79,17 +112,43 @@ class MainWindow(QMainWindow):
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.setCentralWidget(self.splitter)
 
-        self.packet_table = QTableWidget(0, len(PACKET_COLUMNS))
-        self.packet_table.setHorizontalHeaderLabels(PACKET_COLUMNS)
+        list_panel = QWidget()
+        list_layout = QVBoxLayout(list_panel)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Filter:"))
+        self.filter_edit = QLineEdit()
+        self.filter_edit.setPlaceholderText(
+            "Search packets - IP, port, protocol, SIP/SDP/XML content, RTP fields..."
+        )
+        self.filter_edit.textChanged.connect(self._apply_filter)
+        filter_row.addWidget(self.filter_edit)
+        clear_filter_btn = QPushButton("Clear")
+        clear_filter_btn.clicked.connect(self.filter_edit.clear)
+        filter_row.addWidget(clear_filter_btn)
+        list_layout.addLayout(filter_row)
+
+        self.packet_table = QTableWidget(0, len(COLUMN_DEFS))
+        self.packet_table.setHorizontalHeaderLabels([c[1] for c in COLUMN_DEFS])
         self.packet_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.packet_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.packet_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.packet_table.horizontalHeader().setSectionResizeMode(
-            len(PACKET_COLUMNS) - 1, QHeaderView.ResizeMode.Stretch
-        )
+        self.packet_table.setSortingEnabled(True)
+
+        header = self.packet_table.horizontalHeader()
+        header.setSectionResizeMode(len(COLUMN_DEFS) - 1, QHeaderView.ResizeMode.Stretch)
+        header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        header.customContextMenuRequested.connect(self._show_column_menu)
+
+        for col, (_key, _label, default_visible, _kind) in enumerate(COLUMN_DEFS):
+            self.packet_table.setColumnHidden(col, not default_visible)
+
         self.packet_table.itemSelectionChanged.connect(self._on_row_selected)
         self.packet_table.cellDoubleClicked.connect(self._on_row_double_clicked)
-        self.splitter.addWidget(self.packet_table)
+        list_layout.addWidget(self.packet_table)
+
+        self.splitter.addWidget(list_panel)
 
         editor = QWidget()
         editor_layout = QVBoxLayout(editor)
@@ -333,23 +392,75 @@ class MainWindow(QMainWindow):
     # Packet list
     # ------------------------------------------------------------------
     def _populate_packet_table(self) -> None:
+        # Column 0 always carries the record's stable identity (its
+        # position in model.records) in UserRole, since sorting/filtering
+        # mean a row's visual position no longer matches that index.
+        header = self.packet_table.horizontalHeader()
+        sort_section, sort_order = header.sortIndicatorSection(), header.sortIndicatorOrder()
+
+        self.packet_table.setSortingEnabled(False)
         self.packet_table.setRowCount(len(self.model.records))
         for row, record in enumerate(self.model.records):
             summary = record.summary()
-            values = (
-                summary["index"],
-                f"{summary['time']:.6f}",
-                summary["src"],
-                summary["dst"],
-                summary["proto"],
-                summary["length"],
-                summary["info"],
-            )
-            for col, value in enumerate(values):
-                item = QTableWidgetItem(str(value))
-                if record.has_sip or record.has_rtp or record.has_sdp or record.has_xml:
+            highlighted = record.has_sip or record.has_rtp or record.has_sdp or record.has_xml
+
+            for col, (key, _label, _default, kind) in enumerate(COLUMN_DEFS):
+                value = summary.get(key)
+                if key == "time":
+                    text = f"{value:.6f}"
+                else:
+                    text = "" if value is None else str(value)
+
+                if kind in ("int", "float"):
+                    sort_value = value if value is not None else float("-inf")
+                    item = NumericTableWidgetItem(text, sort_value)
+                else:
+                    item = QTableWidgetItem(text)
+                if col == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, record.index)
+                if highlighted:
                     item.setForeground(Qt.GlobalColor.darkGreen)
                 self.packet_table.setItem(row, col, item)
+
+        self.packet_table.setSortingEnabled(True)
+        self.packet_table.sortByColumn(sort_section, sort_order)
+        self._apply_filter()
+
+    def _show_column_menu(self, pos) -> None:
+        menu = QMenu(self)
+        for col, (_key, label, _default, _kind) in enumerate(COLUMN_DEFS):
+            action = QAction(label, menu)
+            action.setCheckable(True)
+            action.setChecked(not self.packet_table.isColumnHidden(col))
+            action.toggled.connect(
+                lambda checked, c=col: self.packet_table.setColumnHidden(c, not checked)
+            )
+            menu.addAction(action)
+        menu.exec(self.packet_table.horizontalHeader().mapToGlobal(pos))
+
+    def _apply_filter(self) -> None:
+        needle = self.filter_edit.text().strip().lower()
+        for row in range(self.packet_table.rowCount()):
+            if not needle:
+                self.packet_table.setRowHidden(row, False)
+                continue
+
+            record = self.model.records[self._record_index_at_row(row)]
+            column_text = " ".join(
+                self.packet_table.item(row, col).text().lower()
+                for col in range(self.packet_table.columnCount())
+            )
+            matches = needle in column_text or needle in record.searchable_text()
+            self.packet_table.setRowHidden(row, not matches)
+
+    def _record_index_at_row(self, row: int) -> int:
+        return self.packet_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+
+    def _visual_row_for_index(self, record_index: int) -> int | None:
+        for row in range(self.packet_table.rowCount()):
+            if self._record_index_at_row(row) == record_index:
+                return row
+        return None
 
     def _on_row_selected(self) -> None:
         rows = self.packet_table.selectionModel().selectedRows()
@@ -359,14 +470,14 @@ class MainWindow(QMainWindow):
         if self.dirty and self.current_index is not None:
             self._apply_editor_to_record()
 
-        row = rows[0].row()
-        self.current_index = row
-        record = self.model.records[row]
+        record_index = self._record_index_at_row(rows[0].row())
+        self.current_index = record_index
+        record = self.model.records[record_index]
 
         self._load_layers_tab(record)
         self._configure_payload_tabs(record)
         self._set_editor_enabled(True)
-        self.status.showMessage(f"Editing packet {row}")
+        self.status.showMessage(f"Editing packet {record_index}")
         self.dirty = False
 
     def _on_row_double_clicked(self, row: int, _column: int) -> None:
@@ -597,7 +708,9 @@ class MainWindow(QMainWindow):
         record.apply_edits()
 
         self._populate_packet_table()
-        self.packet_table.selectRow(self.current_index)
+        visual_row = self._visual_row_for_index(self.current_index)
+        if visual_row is not None:
+            self.packet_table.selectRow(visual_row)
         self.dirty = False
         self.status.showMessage(f"Applied edits to packet {self.current_index}")
 
