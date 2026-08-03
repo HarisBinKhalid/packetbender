@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The packet list defaulted to sorted by packet number *descending* instead of ascending - Qt's header defaults to a descending sort indicator on column 0 before any column has been clicked, which this now overrides explicitly on startup.
 - The filter bar applied on every keystroke; it now only filters when Enter is pressed (or the Clear button is used), so typing doesn't repeatedly re-scan the packet list mid-word.
+- The Info column showed bare SIP response lines (`SIP/2.0 200 OK`) with no indication of which request they answered, unlike Wireshark. It now appends the method from the `CSeq` header, e.g. `SIP/2.0 200 OK (INVITE)` or `SIP/2.0 200 OK (UPDATE)` (`SipMessage.is_response()` / `SipMessage.cseq_method()`).
 
 ### Planned
 - Windows packaging (PyInstaller build) and CI build matrix.

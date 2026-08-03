@@ -62,3 +62,27 @@ def test_round_trip_preserves_header_order():
     serialized = msg.serialize()
     reparsed = SipMessage.parse(serialized)
     assert [h.name for h in reparsed.headers] == [h.name for h in msg.headers]
+
+
+def test_request_is_not_a_response():
+    msg = SipMessage.parse(INVITE)
+    assert not msg.is_response()
+
+
+def test_response_cseq_method_identifies_the_request_it_answers():
+    ok_200 = (
+        b"SIP/2.0 200 OK\r\n"
+        b"Via: SIP/2.0/UDP client.atlanta.example.com:5060\r\n"
+        b"CSeq: 314159 INVITE\r\n"
+        b"Content-Length: 0\r\n"
+        b"\r\n"
+    )
+    msg = SipMessage.parse(ok_200)
+    assert msg.is_response()
+    assert msg.cseq_method() == "INVITE"
+
+
+def test_cseq_method_is_none_without_a_cseq_header():
+    ok_200_no_cseq = b"SIP/2.0 200 OK\r\nContent-Length: 0\r\n\r\n"
+    msg = SipMessage.parse(ok_200_no_cseq)
+    assert msg.cseq_method() is None

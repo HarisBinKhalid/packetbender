@@ -49,6 +49,29 @@ def test_load_detects_sip_packets(tmp_path):
     assert not model.records[1].has_sip
 
 
+def test_sip_response_info_shows_which_request_it_answers(tmp_path):
+    ok_200 = (
+        b"SIP/2.0 200 OK\r\n"
+        b"Via: SIP/2.0/UDP client.atlanta.example.com:5060\r\n"
+        b"CSeq: 314159 INVITE\r\n"
+        b"Content-Length: 0\r\n"
+        b"\r\n"
+    )
+    pcap_path = str(tmp_path / "response.pcap")
+    pkt = (
+        Ether(src="aa:aa:aa:aa:aa:aa", dst="bb:bb:bb:bb:bb:bb")
+        / IP(src="10.0.0.2", dst="10.0.0.1")
+        / UDP(sport=5060, dport=5060)
+        / Raw(load=ok_200)
+    )
+    wrpcap(pcap_path, [pkt])
+
+    model = PcapModel()
+    model.load(pcap_path)
+
+    assert model.records[0].summary()["info"] == "SIP/2.0 200 OK (INVITE)"
+
+
 def test_edit_and_save_recomputes_lengths_and_checksums(tmp_path):
     pcap_path = str(tmp_path / "in.pcap")
     out_path = str(tmp_path / "out.pcap")

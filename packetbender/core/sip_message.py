@@ -72,6 +72,20 @@ class SipMessage:
                 return
         self.headers.append(SipHeader(name=name, value=value))
 
+    def is_response(self) -> bool:
+        return self.start_line.startswith("SIP/2.0")
+
+    def cseq_method(self) -> str | None:
+        """The method from the CSeq header (e.g. "INVITE" from
+        "CSeq: 314159 INVITE"). Responses carry the method of the request
+        they're replying to here - it's the only place a response line
+        itself doesn't say what it's responding to."""
+        value = self.get("CSeq")
+        if not value:
+            return None
+        parts = value.split()
+        return parts[-1] if parts else None
+
     def content_type(self) -> str:
         """The body's MIME type (e.g. ``application/sdp``), lower-cased and
         stripped of parameters, or "" if absent. Falls back to the SIP

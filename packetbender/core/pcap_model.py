@@ -95,6 +95,10 @@ class PacketRecord:
 
         if self.sip is not None:
             info = self.sip.start_line
+            if self.sip.is_response():
+                method = self.sip.cseq_method()
+                if method:
+                    info = f"{info} ({method})"
         elif self.rtp is not None:
             info = (
                 f"PT={self.rtp.payload_type} Seq={self.rtp.sequence} "
