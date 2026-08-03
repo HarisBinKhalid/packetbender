@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - A close ("✕") button on the editor panel, so it can be explicitly dismissed instead of only being resizable. Double-clicking any packet row still reopens it (and reopens it if it was closed, not just resized down).
+- **Bulk Edit** (new toolbar action): apply one field change across every matching packet instead of editing packets one at a time - e.g. replace a `Call-ID` across every SIP message in a call, or set the source IP for every packet in a capture. Supports two targets (a SIP header, or a scalar L2-L4 field on Ethernet/IP/IPv6/UDP/TCP), an optional "old value" filter (blank matches every packet that has the field), and a scope of either all packets or only the currently filtered ones (`packetbender.core.bulk_edit`, `packetbender.gui.bulk_edit_dialog`).
 
 ### Changed
 - The editor panel now starts closed by default on launch, rather than open with nothing selected. Double-click any packet row to open it.

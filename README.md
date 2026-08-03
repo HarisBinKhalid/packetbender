@@ -55,6 +55,20 @@ value.
   errors via `xml.dom.minidom`.
 - **Raw payload tab**: for anything not recognized above, edit the
   payload as Latin-1 text (a lossless byte <-> text mapping).
+- **Bulk Edit** (toolbar): change one field across every matching packet
+  in a single operation instead of editing packets one at a time —
+  e.g. replace a `Call-ID` across every SIP message in a call, or set
+  the source IP for every packet in the capture. Two targets:
+  - **SIP Header**: header name + optional old value (blank matches any
+    current value) + new value.
+  - **Generic Field**: pick a layer (Ethernet/IP/IPv6/UDP/TCP) and a
+    scalar field (address, port, TTL, ...) + optional old value + new
+    value.
+
+  Scope to *all packets* or *only the currently filtered packets*, so a
+  filter like `Call-ID: abc123` followed by Bulk Edit targets just that
+  call. Length/checksum recalculation applies the same as any other
+  edit.
 - Save edits to a new PCAP file, leaving the original untouched.
 
 ## Status
@@ -106,8 +120,9 @@ pip install -r requirements.txt pytest
 pytest
 ```
 
-Core parsing/serialization (SIP, SDP, RTP, XML, generic layer fields) and
-PCAP load/save logic are unit tested independently of the GUI (`tests/`).
+Core parsing/serialization (SIP, SDP, RTP, XML, generic layer fields,
+bulk edit) and PCAP load/save logic are unit tested independently of the
+GUI (`tests/`).
 
 ## Project layout
 
@@ -119,12 +134,14 @@ packetbender/
     rtp_message.py       # Minimal RTP fixed-header dissector + detection heuristic
     xml_message.py        # XML detection, validation, and pretty-printing
     layer_fields.py         # Generic L2-L4 field introspection/editing for any packet
-    pcap_model.py           # PCAP load/save + checksum/length recalculation via Scapy
+    bulk_edit.py             # Apply a field edit across every matching packet at once
+    pcap_model.py             # PCAP load/save + checksum/length recalculation via Scapy
   gui/
-    main_window.py          # PyQt6 main window: packet list + Layers/SIP/RTP/SDP/XML/Raw tabs
-  app.py                    # Application entry point
-tests/                      # Unit tests for the core (non-GUI) logic
-main.py                     # Convenience launcher (python main.py)
+    main_window.py            # PyQt6 main window: packet list + Layers/SIP/RTP/SDP/XML/Raw tabs
+    bulk_edit_dialog.py        # Bulk Edit dialog: scope + SIP header / generic field target
+  app.py                      # Application entry point
+tests/                        # Unit tests for the core (non-GUI) logic
+main.py                       # Convenience launcher (python main.py)
 ```
 
 ## License

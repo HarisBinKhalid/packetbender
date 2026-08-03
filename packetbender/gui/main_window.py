@@ -15,6 +15,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QDialog,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
@@ -35,11 +36,13 @@ from PyQt6.QtWidgets import (
 )
 from scapy.packet import Raw
 
+from packetbender.core.bulk_edit import bulk_set_layer_field, bulk_set_sip_header
 from packetbender.core.layer_fields import field_rows, parse_field_value
 from packetbender.core.pcap_model import PcapModel
 from packetbender.core.sdp_message import SdpLine, SdpMessage, looks_like_sdp
 from packetbender.core.sip_message import SipHeader, SipMessage
 from packetbender.core.xml_message import looks_like_xml, pretty_print
+from packetbender.gui.bulk_edit_dialog import BulkEditDialog
 
 # (summary dict key, header label, visible by default, sort kind).
 # Column position here is fixed; visibility is toggled via the header's
@@ -353,6 +356,10 @@ class MainWindow(QMainWindow):
         save_action.triggered.connect(self._save_pcap_as)
         toolbar.addAction(save_action)
 
+        bulk_edit_action = QAction("Bulk Edit...", self)
+        bulk_edit_action.triggered.connect(self._open_bulk_edit_dialog)
+        toolbar.addAction(bulk_edit_action)
+
     # ------------------------------------------------------------------
     # File operations
     # ------------------------------------------------------------------
@@ -403,6 +410,55 @@ class MainWindow(QMainWindow):
             return
 
         self.status.showMessage(f"Saved {len(self.model.records)} packets to {path}")
+
+    def _open_bulk_edit_dialog(self) -> None:
+        if not self.model.records:
+            QMessageBox.information(self, "Nothing to edit", "Open a PCAP file first.")
+            return
+
+        if self.dirty and self.current_index is not None:
+            self._apply_editor_to_record()
+
+        filter_active = bool(self.filter_edit.text().strip())
+        dialog = BulkEditDialog(self, filter_active)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        records = self._bulk_edit_target_records(dialog.scope())
+        if not records:
+            QMessageBox.information(self, "No packets", "No packets matched the chosen scope.")
+            return
+
+        if dialog.target_type() == "sip_header":
+            header_name, old_value, new_value = dialog.sip_header_params()
+            if not header_name:
+                QMessageBox.warning(self, "Missing header name", "Enter a header name to change.")
+                return
+            changed = bulk_set_sip_header(records, header_name, old_value, new_value)
+        else:
+            layer_name, field_name, old_value, new_value = dialog.layer_field_params()
+            if not field_name:
+                QMessageBox.warning(self, "Missing field", "Choose a field to change.")
+                return
+            changed = bulk_set_layer_field(records, layer_name, field_name, old_value, new_value)
+
+        self._populate_packet_table()
+        if self.current_index is not None:
+            visual_row = self._visual_row_for_index(self.current_index)
+            if visual_row is not None:
+                self.packet_table.selectRow(visual_row)
+
+        self.status.showMessage(f"Bulk edit changed {changed} packet(s)")
+        QMessageBox.information(self, "Bulk edit complete", f"Changed {changed} packet(s).")
+
+    def _bulk_edit_target_records(self, scope: str) -> list:
+        if scope == "filtered":
+            indices = [
+                self._record_index_at_row(row) for row in range(self.packet_table.rowCount())
+                if not self.packet_table.isRowHidden(row)
+            ]
+            return [self.model.records[i] for i in indices]
+        return list(self.model.records)
 
     # ------------------------------------------------------------------
     # Packet list
