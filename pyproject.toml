@@ -25,6 +25,9 @@ dependencies = [
 dev = [
     "pytest>=7.0",
 ]
+build = [
+    "pyinstaller>=6.0",
+]
 
 [project.scripts]
 packetbender = "packetbender.app:main"

@@ -113,6 +113,28 @@ packetbender
    unless pinned via the Layers tab's "Auto" checkbox).
 5. **Save As...** to write out a new PCAP file.
 
+## Standalone executable (no Python/terminal needed to run)
+
+For end users who shouldn't need to open a terminal, activate a venv, or
+have Python installed at all, build a single self-contained executable
+with [PyInstaller](https://pyinstaller.org/):
+
+```bash
+./build.sh
+```
+
+This creates its own build venv (if one doesn't exist), installs
+dependencies plus PyInstaller, and produces `dist/packetbender` — a
+single file bundling Python, PyQt6, and Scapy. Hand that file to a user
+and they just run it (double-click in a file manager, or `./packetbender`
+from a terminal); no setup steps on their end.
+
+The build itself still needs Python (that's a one-time step for
+whoever *builds* the executable, not for whoever *runs* it). The result
+is platform-specific — a Linux build only runs on Linux; building on
+Windows once that's supported will need to happen on a Windows machine
+(or via a Windows CI runner) to produce a `.exe`.
+
 ## Running tests
 
 ```bash
@@ -142,6 +164,8 @@ packetbender/
   app.py                      # Application entry point
 tests/                        # Unit tests for the core (non-GUI) logic
 main.py                       # Convenience launcher (python main.py)
+build.sh                      # Builds a standalone executable (see below)
+packetbender.spec             # PyInstaller build spec used by build.sh
 ```
 
 ## License
