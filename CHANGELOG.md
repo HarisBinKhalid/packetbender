@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned
+- Windows packaging (PyInstaller build) and CI build matrix.
+- Syntax highlighting for the raw SIP body/header editor.
+- Dissection of RTP CSRC lists and header extensions (currently passed through as opaque payload).
+
+## [0.5.0] - 2026-08-04
+
 ### Added
 - **Standalone executable build** (`build.sh` + `packetbender.spec`): produces a single self-contained `dist/packetbender` binary via PyInstaller, bundling Python/PyQt6/Scapy, so end users can run the app without a terminal, a venv, or Python installed at all. Every scapy submodule is force-included (`collect_submodules`) since scapy loads its protocol layers dynamically at runtime rather than via imports PyInstaller's static analysis can see - without that, the packaged binary would launch fine but fail to dissect most non-trivial protocols. Verified the built binary launches and runs cleanly standalone.
 - A close ("✕") button on the editor panel, so it can be explicitly dismissed instead of only being resizable. Double-clicking any packet row still reopens it (and reopens it if it was closed, not just resized down).
@@ -16,20 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - The editor panel now starts closed by default on launch, rather than open with nothing selected. Double-click any packet row to open it.
+- README now leads with a note that the project was built entirely by AI and an invitation for community bug reports/contributions/pull requests.
+- Added `HANDOFF.md`: an internal design/context document (architecture, mutation choke points, known bug traps, testing conventions) aimed at whoever - human or AI - picks up development next.
 
 ### Fixed
 - Switching the Bulk Edit dialog's "Layer" dropdown while on the Generic Field page could abort the whole application (a native Qt crash, not a Python exception) - repopulating the "Field" dropdown fired its `currentTextChanged` signal mid-mutation, reentrantly triggering the live-preview update while the combo box was in a transient, half-populated state. Fixed by blocking signals during the repopulate and updating the preview once, explicitly, afterward.
-
-### Fixed
 - The packet list defaulted to sorted by packet number *descending* instead of ascending - Qt's header defaults to a descending sort indicator on column 0 before any column has been clicked, which this now overrides explicitly on startup.
 - The filter bar applied on every keystroke; it now only filters when Enter is pressed (or the Clear button is used), so typing doesn't repeatedly re-scan the packet list mid-word.
 - The Info column showed bare SIP response lines (`SIP/2.0 200 OK`) with no indication of which request they answered, unlike Wireshark. It now appends the method from the `CSeq` header, e.g. `SIP/2.0 200 OK (INVITE)` or `SIP/2.0 200 OK (UPDATE)` (`SipMessage.is_response()` / `SipMessage.cseq_method()`).
 - **Editing any single field in the Layers tab (e.g. an IP address) corrupted the packet and produced a length error when reopened in Wireshark.** Apply re-sent every displayed field's text back through `setattr`, not just the one actually edited - fields that don't round-trip through plain text unchanged (like `IP.options`, a list displayed as `"[]"`) got reapplied as that literal string, encoding garbage bytes into the header and desyncing it from the length/IHL fields, which shifted every field after it. Apply now only touches a field if its text actually changed.
-
-### Planned
-- Windows packaging (PyInstaller build) and CI build matrix.
-- Syntax highlighting for the raw SIP body/header editor.
-- Dissection of RTP CSRC lists and header extensions (currently passed through as opaque payload).
 
 ## [0.4.0] - 2026-08-03
 

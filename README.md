@@ -111,8 +111,11 @@ Or, after installing the package (`pip install .`):
 packetbender
 ```
 
-1. **Open PCAP...** and select a capture file.
-2. Click a packet in the list.
+1. **Open PCAP...** and select a capture file (the window title then shows
+   the open capture's filename).
+2. Double-click a packet in the list to open the editor panel (closed by
+   default; use the "✕" button to dismiss it, double-click any row to
+   reopen it).
 3. Use the **Layers** tab to edit L2-L4 header fields, and the **SIP**,
    **RTP**, **SDP**, **XML**, or **Raw Payload** tab (whichever applies)
    to edit the payload.
