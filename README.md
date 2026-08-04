@@ -1,5 +1,13 @@
 # PacketBender
 
+> **This project was built entirely by AI** (no hand-written code) as an
+> experiment in AI-driven development. It works and is tested against real
+> capture data, but review it with that in mind.
+>
+> **Contributions welcome** — bug reports, feature requests, and pull
+> requests are all encouraged. If you find a case this tool handles wrong,
+> please open an issue (ideally with a capture or steps to reproduce).
+
 A small desktop GUI, built on [Scapy](https://scapy.net/) and PyQt6, for
 viewing and editing packets inside PCAP files — without hand-editing bytes
 or breaking lengths and checksums.
