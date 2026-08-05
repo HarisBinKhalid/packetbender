@@ -48,7 +48,11 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: pytest -q
+        # `python -m pytest` (not the bare `pytest` console script) so the
+        # current directory lands on sys.path - tests/ has no __init__.py
+        # and the package isn't pip-installed, so `import packetbender`
+        # only resolves this way.
+        run: python -m pytest -q
 
   build-smoke-test:
     # Catches packaging regressions (e.g. a missing `collect_submodules`
