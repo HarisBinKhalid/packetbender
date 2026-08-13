@@ -1,0 +1,20 @@
+# Normalize all text files to LF in the repository, regardless of the
+# platform or editor used to check them out or edit them (this repo is
+# actively developed from both Linux/WSL and Windows).
+* text=auto eol=lf
+
+# Windows batch/PowerShell scripts should keep CRLF if any are added later.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Never let git attempt line-ending normalization on binaries (build output,
+# icons, sample captures) - safety net even though most of these are also
+# gitignored.
+*.exe binary
+*.dll binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.pcap binary
+*.pcapng binary
+
