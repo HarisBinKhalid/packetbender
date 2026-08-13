@@ -1,0 +1,102 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # PyQt6 needs these even with the offscreen platform plugin (no real
+      # display in CI) - the GUI tests construct a real QApplication.
+      - name: Install Qt system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 \
+            libgl1 \
+            libxkbcommon0 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xinerama0 \
+            libxcb-xfixes0
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        # `python -m pytest` (not the bare `pytest` console script) so the
+        # current directory lands on sys.path - tests/ has no __init__.py
+        # and the package isn't pip-installed, so `import packetbender`
+        # only resolves this way.
+        run: python -m pytest -q
+
+  build-smoke-test:
+    # Catches packaging regressions (e.g. a missing `collect_submodules`
+    # entry in packetbender.spec) that unit tests can't see, by actually
+    # building the standalone executable and confirming it launches.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Qt system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 \
+            libgl1 \
+            libxkbcommon0 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xinerama0 \
+            libxcb-xfixes0
+
+      - name: Build standalone executable
+        run: ./build.sh
+
+      - name: Verify the executable launches without crashing
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ./dist/packetbender &
+          pid=$!
+          sleep 3
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo "packetbender exited within 3s of launch - likely a packaging/import failure"
+            exit 1
+          fi
+          kill "$pid"
