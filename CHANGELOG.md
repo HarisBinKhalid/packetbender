@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Windows support**: `build.ps1`, a PowerShell counterpart to `build.sh`, builds a standalone `dist\packetbender.exe` via the same `packetbender.spec` PyInstaller spec used on Linux/macOS. No application code changes were needed — `packetbender/core` and `packetbender/gui` were already pure Python with no OS-specific paths; verified by running the full test suite (71 passed), the PyInstaller build, and the resulting executable on Windows 11. README now documents Windows-specific install/build steps (`.venv\Scripts\Activate.ps1`, `.\build.ps1`) alongside the existing Linux/macOS ones.
+
+### Fixed
+- Both build scripts checked only "does `.venv` exist," not "is it a venv for *this* OS" — a `.venv` carried over from a checkout on the other platform (e.g. Linux's `bin/` copied onto a Windows machine, which has `Scripts/` instead) would pass that check and then fail on the first `pip`/`pyinstaller` call. Both scripts now check for the platform-specific interpreter path (`.venv/bin/python` / `.venv\Scripts\python.exe`) and recreate the venv if it's missing.
+
 ### Planned
-- Windows packaging (PyInstaller build) and CI build matrix.
+- CI build matrix (Linux + Windows).
 - Syntax highlighting for the raw SIP body/header editor.
 - Dissection of RTP CSRC lists and header extensions (currently passed through as opaque payload).
 

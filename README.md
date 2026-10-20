@@ -81,11 +81,10 @@ value.
 
 ## Status
 
-Linux is supported today. Windows support is planned (see
-[CHANGELOG.md](CHANGELOG.md)) — the codebase is pure Python (PyQt6 + Scapy),
-so no Linux-specific code paths exist; Windows mainly needs
-[Npcap](https://npcap.com/) if live capture is added later. Offline PCAP
-editing (this tool's current scope) has no platform-specific dependencies.
+Linux and Windows are both supported — the codebase is pure Python
+(PyQt6 + Scapy) with no OS-specific code paths. Offline PCAP editing (this
+tool's current scope) has no platform-specific dependencies; [Npcap](https://npcap.com/)
+is only needed on Windows if live capture is added later.
 
 ## Installation
 
@@ -94,8 +93,21 @@ Requires Python 3.10+.
 ```bash
 git clone https://github.com/<your-username>/packetbender.git
 cd packetbender
+```
+
+Linux / macOS:
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
@@ -130,21 +142,30 @@ For end users who shouldn't need to open a terminal, activate a venv, or
 have Python installed at all, build a single self-contained executable
 with [PyInstaller](https://pyinstaller.org/):
 
+Linux / macOS:
+
 ```bash
 ./build.sh
 ```
 
-This creates its own build venv (if one doesn't exist), installs
-dependencies plus PyInstaller, and produces `dist/packetbender` — a
-single file bundling Python, PyQt6, and Scapy. Hand that file to a user
-and they just run it (double-click in a file manager, or `./packetbender`
-from a terminal); no setup steps on their end.
+Windows (PowerShell):
+
+```powershell
+.\build.ps1
+```
+
+Either script creates its own build venv (if one doesn't exist), installs
+dependencies plus PyInstaller, and produces `dist/packetbender` (Linux/macOS)
+or `dist\packetbender.exe` (Windows) — a single file bundling Python, PyQt6,
+and Scapy. Hand that file to a user and they just run it (double-click in a
+file manager/File Explorer, or run it from a terminal); no setup steps on
+their end.
 
 The build itself still needs Python (that's a one-time step for
 whoever *builds* the executable, not for whoever *runs* it). The result
-is platform-specific — a Linux build only runs on Linux; building on
-Windows once that's supported will need to happen on a Windows machine
-(or via a Windows CI runner) to produce a `.exe`.
+is platform-specific — a Linux build only runs on Linux, and a Windows
+build only runs on Windows — so building for both requires running the
+matching script on a machine (or CI runner) of that OS.
 
 ## Running tests
 
@@ -175,8 +196,9 @@ packetbender/
   app.py                      # Application entry point
 tests/                        # Unit tests for the core (non-GUI) logic
 main.py                       # Convenience launcher (python main.py)
-build.sh                      # Builds a standalone executable (see below)
-packetbender.spec             # PyInstaller build spec used by build.sh
+build.sh                      # Builds a standalone executable on Linux/macOS (see below)
+build.ps1                     # Builds a standalone executable on Windows (see below)
+packetbender.spec             # PyInstaller build spec shared by build.sh and build.ps1
 ```
 
 ## License

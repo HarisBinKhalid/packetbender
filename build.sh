@@ -7,10 +7,14 @@
 #
 # The build itself still needs Python + a venv (one-time setup for
 # whoever is building it); this script creates one if missing.
+# Windows counterpart: build.ps1 - keep both in sync when changing.
 set -euo pipefail
 cd "$(dirname "$0")"
 
-if [ ! -d .venv ]; then
+# Not just "does .venv exist" - a .venv carried over from a Windows
+# checkout (Scripts/ instead of bin/) would exist as a directory but have
+# no bin/python, silently breaking every step below.
+if [ ! -x .venv/bin/python ]; then
     echo "Creating build virtual environment..."
     python3 -m venv .venv
 fi
